@@ -1,0 +1,4 @@
+libpq-dev
+libjpeg-dev
+zlib1g-dev
+libmagic-dev
