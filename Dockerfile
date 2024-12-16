@@ -9,13 +9,18 @@ RUN apt-get update && apt-get install -y \
     libmagic-dev \
     && apt-get clean
 
+# Crea un utente non root
+RUN useradd -m myuser
+USER myuser
+
 # Crea la directory di lavoro
 WORKDIR /app
 
 # Copia i file del progetto
 COPY . /app
 
-# Installa le dipendenze Python
+# Aggiorna pip e installa le dipendenze Python
+RUN python -m pip install --upgrade pip
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Comando di avvio dell'app
