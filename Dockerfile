@@ -2,6 +2,7 @@ FROM python:3.10-slim
 
 # Installa le dipendenze di sistema necessarie
 RUN apt-get update && apt-get install -y \
+    apt-utils \
     libpq-dev \
     libjpeg-dev \
     zlib1g-dev \
