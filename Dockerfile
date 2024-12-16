@@ -7,8 +7,7 @@ RUN apt-get update && apt-get install -y \
     libjpeg-dev \
     zlib1g-dev \
     libmagic-dev \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
+    && apt-get clean
 
 # Crea un utente non root
 RUN useradd -m myuser
@@ -18,16 +17,17 @@ USER myuser
 WORKDIR /app
 
 # Copia i file del progetto
-COPY --chown=myuser:myuser . /app
+COPY . /app
 
-# Aggiorna pip e installa le dipendenze Python
+# Aggiungi il percorso di pip al PATH
+ENV PATH="/home/myuser/.local/bin:${PATH}"
+
+# Aggiorna pip
 RUN python -m pip install --upgrade pip
-RUN pip install --no-cache-dir -r requirements.txt
 
-# Imposta la variabile d'ambiente per Streamlit
-ENV STREAMLIT_SERVER_PORT=$PORT
+# Installa streamlit
+RUN pip install streamlit
 
-# Comando di avvio dell'app
-CMD ["streamlit", "run", "app.py", "--server.enableCORS=false"]
-
-
+# Verifica la versione di streamlit
+RUN which streamlit
+RUN streamlit --version
