@@ -5,8 +5,8 @@ import os
 import io
 import bcrypt
 import stripe
-import streamlit_authenticator as stauth
 from dotenv import load_dotenv
+import streamlit_authenticator as stauth
 
 # Carica le variabili d'ambiente
 load_dotenv()
