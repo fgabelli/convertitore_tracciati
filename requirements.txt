@@ -1,6 +1,6 @@
 streamlit
-streamlit-authenticator
-pandas
-openpyxl
-xlsxwriter
+flask
+stripe
+python-dotenv
 bcrypt
+streamlit-authenticator
