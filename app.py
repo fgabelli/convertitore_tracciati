@@ -5,8 +5,6 @@ import os
 import io
 import bcrypt
 import stripe
-from flask import Flask, request, jsonify
-import threading
 import streamlit_authenticator as stauth
 from dotenv import load_dotenv
 
@@ -22,35 +20,14 @@ CREDENTIALS_FILE = "user_credentials.json"
 PROFILE_DIR = "profiles"
 os.makedirs(PROFILE_DIR, exist_ok=True)
 
-# Flask per i Webhooks
-app = Flask(__name__)
+# Carica e salva credenziali
+def load_credentials():
+    with open(CREDENTIALS_FILE, 'r') as file:
+        return json.load(file)
 
-@app.route("/webhook", methods=["POST"])
-def stripe_webhook():
-    payload = request.get_data(as_text=True)
-    sig_header = request.headers.get("Stripe-Signature")
-    try:
-        event = stripe.Webhook.construct_event(payload, sig_header, endpoint_secret)
-    except ValueError:
-        return jsonify(success=False), 400
-    except stripe.error.SignatureVerificationError:
-        return jsonify(success=False), 400
-
-    # Evento: pagamento completato
-    if event["type"] == "checkout.session.completed":
-        session = event["data"]["object"]
-        customer_email = session["customer_details"]["email"]
-
-        # Aggiorna lo stato premium
-        with open(CREDENTIALS_FILE, 'r+') as file:
-            credentials = json.load(file)
-            for username, user_data in credentials["usernames"].items():
-                if user_data["email"] == customer_email:
-                    user_data["premium"] = True
-                    file.seek(0)
-                    json.dump(credentials, file, indent=4)
-                    print(f"Utente {username} aggiornato a Premium.")
-    return jsonify(success=True), 200
+def save_credentials(credentials):
+    with open(CREDENTIALS_FILE, 'w') as file:
+        json.dump(credentials, file, indent=4)
 
 # Funzione per registrare un nuovo utente
 def register_user():
@@ -96,15 +73,6 @@ def main_page():
         st.warning("Questa funzionalità è riservata agli utenti Premium.")
         st.markdown("[Clicca qui per diventare Premium 🚀](https://buy.stripe.com/test_dR6g0H7Ro9kjacM3cc)")
 
-# Carica e salva credenziali
-def load_credentials():
-    with open(CREDENTIALS_FILE, 'r') as file:
-        return json.load(file)
-
-def save_credentials(credentials):
-    with open(CREDENTIALS_FILE, 'w') as file:
-        json.dump(credentials, file, indent=4)
-
 # Main
 def main():
     credentials = load_credentials()
@@ -127,11 +95,6 @@ def main():
         elif page == "Registrazione":
             register_user()
 
-# Avvio del server Flask per i webhook
-def start_flask():
-    app.run(port=5000)
-
 # Avvio dell'applicazione
 if __name__ == "__main__":
-    threading.Thread(target=start_flask).start()
     main()
