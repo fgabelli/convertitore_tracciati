@@ -1,1 +1,6 @@
-"streamlit" 
+streamlit
+streamlit-authenticator
+pandas
+openpyxl
+xlsxwriter
+bcrypt
