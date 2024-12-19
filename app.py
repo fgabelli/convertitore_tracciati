@@ -1,31 +1,29 @@
-import streamlit as st
-import pandas as pd
-import json
 import os
+import json
 import bcrypt
 import stripe
+import pandas as pd
 from flask import Flask, request, jsonify
 from dotenv import load_dotenv
 import streamlit_authenticator as stauth
-from threading import Thread
-from waitress import serve
+import streamlit as st
 
 # Carica le variabili d'ambiente
 load_dotenv()
 
-# Chiave segreta Stripe e Webhook Secret
+# Chiavi Stripe
 stripe.api_key = os.getenv("STRIPE_API_KEY")
 endpoint_secret = os.getenv("STRIPE_ENDPOINT_SECRET")
+
+# Configurazione Flask per il webhook
+app = Flask(__name__)
 
 # File credenziali
 CREDENTIALS_FILE = "user_credentials.json"
 PROFILE_DIR = "profiles"
 os.makedirs(PROFILE_DIR, exist_ok=True)
 
-# Flask app per il webhook
-flask_app = Flask(__name__)
-
-# Carica e salva credenziali
+# Funzioni per caricare e salvare le credenziali
 def load_credentials():
     with open(CREDENTIALS_FILE, 'r') as file:
         return json.load(file)
@@ -34,37 +32,36 @@ def save_credentials(credentials):
     with open(CREDENTIALS_FILE, 'w') as file:
         json.dump(credentials, file, indent=4)
 
-# Webhook per Stripe
-@flask_app.route("/webhook", methods=["POST"])
+# Route del Webhook di Stripe
+@app.route("/webhook", methods=["POST"])
 def stripe_webhook():
     payload = request.get_data(as_text=True)
     sig_header = request.headers.get("Stripe-Signature")
+
     try:
         event = stripe.Webhook.construct_event(payload, sig_header, endpoint_secret)
-    except ValueError as e:
+    except ValueError:
         return jsonify({"error": "Invalid payload"}), 400
-    except stripe.error.SignatureVerificationError as e:
+    except stripe.error.SignatureVerificationError:
         return jsonify({"error": "Invalid signature"}), 400
 
+    # Gestione dell'evento checkout.session.completed
     if event["type"] == "checkout.session.completed":
         session = event["data"]["object"]
         customer_email = session["customer_details"]["email"]
 
-        # Carica le credenziali
+        # Aggiorna lo stato dell'utente a Premium
         credentials = load_credentials()
-
-        # Aggiorna lo stato premium dell'utente
-        for username, user_data in credentials["usernames"].items():
-            if user_data["email"] == customer_email:
-                user_data["premium"] = True
+        for username, data in credentials["usernames"].items():
+            if data["email"] == customer_email:
+                data["premium"] = True
                 save_credentials(credentials)
-                return jsonify({"status": "success"}), 200
+                print(f"Utente {username} ({customer_email}) aggiornato a Premium.")
+                break
 
-        return jsonify({"error": "Utente non trovato"}), 404
+    return jsonify({"status": "success"}), 200
 
-    return jsonify({"status": "ignored"}), 200
-
-# Funzione per registrare un nuovo utente
+# Streamlit: Registrazione
 def register_user():
     st.title("Registrazione Nuovo Utente")
     with st.form("register_form", clear_on_submit=True):
@@ -93,7 +90,7 @@ def register_user():
                 save_credentials(credentials)
                 st.success("Registrazione completata con successo!")
 
-# Funzionalità principali (solo per utenti Premium)
+# Streamlit: Funzionalità principali
 def main_page():
     st.title("Convertitore Tracciati Record")
     if st.session_state.get("premium"):
@@ -108,7 +105,7 @@ def main_page():
         st.warning("Questa funzionalità è riservata agli utenti Premium.")
         st.markdown("[Clicca qui per diventare Premium 🚀](https://buy.stripe.com/4gw9Cwd1I7eeaOs6oo)")
 
-# Main funzione Streamlit
+# Streamlit: Main
 def main():
     credentials = load_credentials()
     authenticator = stauth.Authenticate(credentials, "cookie_name", "abcdef", cookie_expiry_days=30)
@@ -130,11 +127,13 @@ def main():
         elif page == "Registrazione":
             register_user()
 
-# Avvio delle applicazioni Flask e Streamlit
-def run_flask():
-    serve(flask_app, host="0.0.0.0", port=5000)
-
+# Avvio dell'applicazione Flask per il webhook
 if __name__ == "__main__":
-    flask_thread = Thread(target=run_flask, daemon=True)
-    flask_thread.start()
+    from waitress import serve
+    import threading
+
+    # Flask in un thread separato per il webhook
+    threading.Thread(target=lambda: serve(app, host="0.0.0.0", port=5000)).start()
+
+    # Avvio dell'applicazione Streamlit
     main()
