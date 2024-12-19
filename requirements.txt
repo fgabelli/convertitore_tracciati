@@ -4,3 +4,5 @@ stripe
 python-dotenv
 bcrypt
 streamlit-authenticator
+streamlit-server-state
+
