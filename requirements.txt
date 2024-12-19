@@ -5,4 +5,5 @@ python-dotenv
 bcrypt
 streamlit-authenticator
 streamlit-server-state
+waitress==2.1.2
 
