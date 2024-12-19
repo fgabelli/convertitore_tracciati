@@ -2,12 +2,13 @@ import streamlit as st
 import pandas as pd
 import json
 import os
-import io
 import bcrypt
 import stripe
+from flask import Flask, request, jsonify
 from dotenv import load_dotenv
 import streamlit_authenticator as stauth
-from streamlit_server_state import server_state, server_state_lock
+from threading import Thread
+from waitress import serve
 
 # Carica le variabili d'ambiente
 load_dotenv()
@@ -21,6 +22,9 @@ CREDENTIALS_FILE = "user_credentials.json"
 PROFILE_DIR = "profiles"
 os.makedirs(PROFILE_DIR, exist_ok=True)
 
+# Flask app per il webhook
+flask_app = Flask(__name__)
+
 # Carica e salva credenziali
 def load_credentials():
     with open(CREDENTIALS_FILE, 'r') as file:
@@ -31,28 +35,34 @@ def save_credentials(credentials):
         json.dump(credentials, file, indent=4)
 
 # Webhook per Stripe
-def handle_webhook(request):
-    payload = request.body.decode("utf-8")
+@flask_app.route("/webhook", methods=["POST"])
+def stripe_webhook():
+    payload = request.get_data(as_text=True)
     sig_header = request.headers.get("Stripe-Signature")
     try:
         event = stripe.Webhook.construct_event(payload, sig_header, endpoint_secret)
-    except ValueError:
-        return {"error": "Invalid payload"}, 400
-    except stripe.error.SignatureVerificationError:
-        return {"error": "Invalid signature"}, 400
+    except ValueError as e:
+        return jsonify({"error": "Invalid payload"}), 400
+    except stripe.error.SignatureVerificationError as e:
+        return jsonify({"error": "Invalid signature"}), 400
 
     if event["type"] == "checkout.session.completed":
         session = event["data"]["object"]
-        customer_email = session.get("customer_email")
-        with server_state_lock["credentials"]:
-            credentials = server_state["credentials"]
-            for username, details in credentials["usernames"].items():
-                if details["email"] == customer_email:
-                    details["premium"] = True
-                    save_credentials(credentials)
-                    st.success(f"L'utente {username} è stato aggiornato a Premium!")
-                    break
-    return {"status": "success"}, 200
+        customer_email = session["customer_details"]["email"]
+
+        # Carica le credenziali
+        credentials = load_credentials()
+
+        # Aggiorna lo stato premium dell'utente
+        for username, user_data in credentials["usernames"].items():
+            if user_data["email"] == customer_email:
+                user_data["premium"] = True
+                save_credentials(credentials)
+                return jsonify({"status": "success"}), 200
+
+        return jsonify({"error": "Utente non trovato"}), 404
+
+    return jsonify({"status": "ignored"}), 200
 
 # Funzione per registrare un nuovo utente
 def register_user():
@@ -98,12 +108,9 @@ def main_page():
         st.warning("Questa funzionalità è riservata agli utenti Premium.")
         st.markdown("[Clicca qui per diventare Premium 🚀](https://buy.stripe.com/4gw9Cwd1I7eeaOs6oo)")
 
-# Main
+# Main funzione Streamlit
 def main():
     credentials = load_credentials()
-    with server_state_lock["credentials"]:
-        server_state["credentials"] = credentials
-
     authenticator = stauth.Authenticate(credentials, "cookie_name", "abcdef", cookie_expiry_days=30)
 
     if st.session_state.get("authentication_status"):
@@ -123,6 +130,11 @@ def main():
         elif page == "Registrazione":
             register_user()
 
-# Avvio dell'applicazione
+# Avvio delle applicazioni Flask e Streamlit
+def run_flask():
+    serve(flask_app, host="0.0.0.0", port=5000)
+
 if __name__ == "__main__":
+    flask_thread = Thread(target=run_flask, daemon=True)
+    flask_thread.start()
     main()
