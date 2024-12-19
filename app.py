@@ -7,6 +7,7 @@ import bcrypt
 import stripe
 from dotenv import load_dotenv
 import streamlit_authenticator as stauth
+from streamlit_server_state import server_state, server_state_lock
 
 # Carica le variabili d'ambiente
 load_dotenv()
@@ -28,6 +29,30 @@ def load_credentials():
 def save_credentials(credentials):
     with open(CREDENTIALS_FILE, 'w') as file:
         json.dump(credentials, file, indent=4)
+
+# Webhook per Stripe
+def handle_webhook(request):
+    payload = request.body.decode("utf-8")
+    sig_header = request.headers.get("Stripe-Signature")
+    try:
+        event = stripe.Webhook.construct_event(payload, sig_header, endpoint_secret)
+    except ValueError:
+        return {"error": "Invalid payload"}, 400
+    except stripe.error.SignatureVerificationError:
+        return {"error": "Invalid signature"}, 400
+
+    if event["type"] == "checkout.session.completed":
+        session = event["data"]["object"]
+        customer_email = session.get("customer_email")
+        with server_state_lock["credentials"]:
+            credentials = server_state["credentials"]
+            for username, details in credentials["usernames"].items():
+                if details["email"] == customer_email:
+                    details["premium"] = True
+                    save_credentials(credentials)
+                    st.success(f"L'utente {username} è stato aggiornato a Premium!")
+                    break
+    return {"status": "success"}, 200
 
 # Funzione per registrare un nuovo utente
 def register_user():
@@ -71,11 +96,14 @@ def main_page():
             st.dataframe(input_df.head())
     else:
         st.warning("Questa funzionalità è riservata agli utenti Premium.")
-        st.markdown("[Clicca qui per diventare Premium 🚀](https://buy.stripe.com/test_dR6g0H7Ro9kjacM3cc)")
+        st.markdown("[Clicca qui per diventare Premium 🚀](https://buy.stripe.com/4gw9Cwd1I7eeaOs6oo)")
 
 # Main
 def main():
     credentials = load_credentials()
+    with server_state_lock["credentials"]:
+        server_state["credentials"] = credentials
+
     authenticator = stauth.Authenticate(credentials, "cookie_name", "abcdef", cookie_expiry_days=30)
 
     if st.session_state.get("authentication_status"):
