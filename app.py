@@ -96,7 +96,7 @@ def main_page():
             st.dataframe(input_df.head())
     else:
         st.warning("Questa funzionalità è riservata agli utenti Premium.")
-        st.markdown("[Clicca qui per diventare Premium 🚀](https://buy.stripe.com/test_dR6g0H7Ro9kjacM3cc)")
+        st.markdown("[Clicca qui per diventare Premium 🚀](https://buy.stripe.com/4gw9Cwd1I7eeaOs6oo)")
 
 # Main
 def main():
